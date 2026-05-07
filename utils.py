@@ -41,7 +41,7 @@ def calc_prob(model, x0, y):
   return p
 
 
-def show_adversarial_example(model, x0, y, d):
+def show_adversarial_example(model, x0, y, d, original=True):
     x_adv = x0 + d
     with torch.no_grad():
         logits = model(x_adv.unsqueeze(0))
@@ -51,20 +51,31 @@ def show_adversarial_example(model, x0, y, d):
 
     p_orig = calc_prob(model, x0, y)
 
-    fig, axes = plt.subplots(1, 3, figsize=(10, 5))
+    if original:
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))
+        axes[0].imshow(img2np(x0))
+        axes[0].set_title(f'Original: {classes[y]}\nconf. = {p_orig:.3f}')
+        axes[1].imshow(img2np(x_adv))
+        axes[1].set_title(f'Adversarial: {classes[yh]}\nconf. = {p_adv:.3f}')
+        pert_vis = torch.clip(d * 100 + 0.5, 0, 1)
+        axes[2].imshow(np.transpose(pert_vis.numpy(), (1, 2, 0)))
+        axes[2].set_title('Perturbation ($\\times 100$)')
 
-    axes[0].imshow(img2np(x0))
-    axes[0].set_title(f'Original: {classes[y]}\nconf. = {p_orig:.3f}')
-    axes[1].imshow(img2np(x_adv))
-    axes[1].set_title(f'Adversarial: {classes[yh]}\nconf. = {p_adv:.3f}')
-    pert_vis = torch.clip(d * 100 + 0.5, 0, 1)
-    axes[2].imshow(np.transpose(pert_vis.numpy(), (1, 2, 0)))
-    axes[2].set_title('Perturbation ($\\times 100$)')
+    else:
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        axes[0].imshow(img2np(x_adv))
+        axes[0].set_title(f'Adversarial: {classes[yh]}\nconf. = {p_adv:.3f}')
+        pert_vis = torch.clip(d * 100 + 0.5, 0, 1)
+        axes[1].imshow(np.transpose(pert_vis.numpy(), (1, 2, 0)))
+        axes[1].set_title('Perturbation ($\\times 100$)')
 
     for ax in axes:
         ax.axis('off')
     plt.tight_layout()
     plt.show()
+    
+    
+
 
 
 def accuracy(model, testloader):
@@ -174,7 +185,7 @@ def attack_success_rate(dataloader, model, attack, e, p, N):
     df = pd.DataFrame(results)
     df['success'] = all_success.numpy()
     df['global_index'] = df.index
-    df.to_csv(file_name, index=False)
-    print(f"Results saved to {file_name}")
+    df.to_csv(f'results/l{p}/{file_name}', index=False)
+    print(f"Results saved to results/l{p}/{file_name}")
 
     return success_rate, successful_indices

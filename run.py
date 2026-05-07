@@ -14,9 +14,9 @@ if __name__ == "__main__":
     subset = Subset(testset, indices)
     loader = DataLoader(subset, batch_size=128, shuffle=False)
 
-    e = 0.1
-    p = np.inf
-    N = 1
-    attack = fgsm
+    e = 0.01
+    p = 1
+    N = 10
+    attack = mifgsm
 
     success_rate, successful_indices = attack_success_rate(loader, model, attack, e=e, p=p, N=N)

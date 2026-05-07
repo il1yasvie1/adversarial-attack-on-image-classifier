@@ -11,7 +11,6 @@ L1: fw, fgsm, ifgsm
 
 
 def lbfgs(model, x0, y, e, p, N):
-    assert p in [2]
     d = torch.zeros_like(x0, requires_grad=True)
     c = 1.0
     optimizer = torch.optim.LBFGS([d], lr=e, max_iter=N)
@@ -26,27 +25,41 @@ def lbfgs(model, x0, y, e, p, N):
     return d.detach()
 
 
+def clip_l1(d, e):
+    v = d.view(d.shape[0], -1)
+    v_abs = v.abs()
+    if (v_abs.sum(1) <= e).all(): return d
+    u, _ = torch.sort(v_abs, descending=True, dim=1)
+    sv = torch.cumsum(u, dim=1)
+    rho = torch.count_nonzero(u * torch.arange(1, v.shape[1]+1, device=d.device) > (sv - e), dim=1)
+    theta = (sv[torch.arange(d.shape[0]), rho - 1] - e) / rho
+    return (torch.sign(v) * torch.max(v_abs - theta.view(-1, 1), torch.zeros_like(v))).view_as(d)
+
+
 def projected_gradient_descent(model, x0, y, e, p, N):
-	assert p in [2,np.inf]
-	d = torch.zeros_like(x0, requires_grad=True)
-	a = e/N
-	for i in range(N):
-		x = x0 + d
-		J = nn.CrossEntropyLoss(reduction='sum')(model(x), y)
-		J.backward()
-		with torch.no_grad():
-			if p == np.inf:
-				d.data = (d + a * d.grad).clamp(-e, e)
-			elif p == 2:
-				g = d.grad
-				g_norm = g.flatten(1).norm(2, 1).view(-1,1,1,1)
-				d_ = d + a * g / g_norm
-				d_norm = d_.flatten(1).norm(2, 1).view(-1,1,1,1)
-				d.data = d_ * torch.clamp(e / d_norm, max=1)
-			else:
-				raise NotImplementedError
-		d.grad.zero_()
-	return d.detach()
+    assert p in [1,2,np.inf]
+    d = torch.zeros_like(x0, requires_grad=True)
+    a = e/N
+    for i in range(N):
+        x = x0 + d
+        J = nn.CrossEntropyLoss(reduction='sum')(model(x), y)
+        J.backward()
+        with torch.no_grad():
+            if p == np.inf:
+                d.data = (d + a * d.grad).clamp(-e, e)
+            elif p == 2:
+                g = d.grad
+                g_norm = g.flatten(1).norm(2, 1).view(-1,1,1,1)
+                d_ = d + a * g / g_norm
+                d_norm = d_.flatten(1).norm(2, 1).view(-1,1,1,1)
+                d.data = d_ * torch.clamp(e / d_norm, max=1)
+            elif p == 1:
+                d_ = d + a * d.grad 
+                d.data = clip_l1(d_, e)
+            else:
+                raise NotImplementedError
+            d.grad.zero_()
+    return d.detach()
 
 
 def frank_wolfe(model, x0, y, e, p, N):
@@ -96,7 +109,7 @@ def fgsm(model, x0, y, e, p, N=1):
 
 		elif p == 1:
 			g = x.grad.flatten(1)
-			K = 50
+			K = 10
 			_, indices = g.abs().topk(K, dim=1)
 			s = torch.zeros_like(g)
 			val = (e / K) * g.gather(1, indices).sign()
@@ -128,7 +141,7 @@ def ifgsm(model, x0, y, e, p, N):
                 
             elif p == 1:
                 g = grad.flatten(1)
-                K = 50
+                K = int(10/N)
                 _, indices = g.abs().topk(K, dim=1)
                 delta = torch.zeros_like(g)
                 val = (a / K) * g.gather(1, indices).sign()
@@ -144,16 +157,40 @@ def ifgsm(model, x0, y, e, p, N):
 
 
 def mifgsm(model, x0, y, e, p, N):
-    assert p in [np.inf]
+    assert p in [1,2,np.inf]
     d = torch.zeros_like(x0, requires_grad=True)
     a = e / N
     mu = 1.0
-    g = torch.zeros_like(x0)
+    g_acc = torch.zeros_like(x0)
+    
     for i in range(N):
         nn.CrossEntropyLoss(reduction='sum')(model(x0 + d), y).backward()
+        
         with torch.no_grad():
-            grad_norm = d.grad.flatten(1).norm(p=1, dim=1).view(-1,1,1,1)
-            g = mu * g + d.grad / grad_norm
-            d.data = (d + a * g.sign()).clamp(-e, e)
+            grad = d.grad
+            grad_l1 = grad.flatten(1).norm(p=1, dim=1).view(-1,1,1,1)
+            g_acc = mu * g_acc + grad / grad_l1
+            
+            if p == np.inf:
+                d.data = (d + a * g_acc.sign()).clamp(-e, e)
+                
+            elif p == 2:
+                g_norm = g_acc.flatten(1).norm(p=2, dim=1).view(-1,1,1,1)
+                d_ = d + a * g_acc / g_norm
+                d_norm = d_.flatten(1).norm(p=2, dim=1).view(-1,1,1,1)
+                d.data = d_ * torch.clamp(e / d_norm, max=1.0)
+                
+            elif p == 1:
+                g_flat = g_acc.flatten(1)
+                K = int(10/N)
+                _, indices = g_flat.abs().topk(K, dim=1)
+                delta = torch.zeros_like(g_flat)
+                val = (a / K) * g_flat.gather(1, indices).sign()
+                delta = delta.scatter_(1, indices, val).view_as(x0)
+                d_new = d + delta
+                d_norm = d_new.flatten(1).norm(1, 1).view(-1,1,1,1)
+                d.data = d_new * torch.clamp(e / d_norm, max=1.0)
+            else:
+                raise NotImplementedError
         d.grad.zero_()
     return d.detach()
