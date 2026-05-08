@@ -182,9 +182,7 @@ The script will:
 
 According to the code comments in `attack.py`, the supported attacks by norm are:
 
-- `Linf`: PGD, Frank-Wolfe, FGSM, IFGSM, MI-FGSM
-- `L2`: LBFGS, PGD, Frank-Wolfe, FGSM, IFGSM
-- `L1`: Frank-Wolfe, FGSM, IFGSM
+- L-BFGS, PGD, Frank-Wolfe, FGSM, I-FGSM, MI-FGSM
 
 The file also contains an implementation of `mifgsm` that is used in the repository and appears in the saved results.
 
