@@ -184,7 +184,6 @@ According to the code comments in `attack.py`, the supported attacks by norm are
 
 - L-BFGS, PGD, Frank-Wolfe, FGSM, I-FGSM, MI-FGSM
 
-The file also contains an implementation of `mifgsm` that is used in the repository and appears in the saved results.
 
 ## Result Files
 
@@ -203,19 +202,6 @@ Each CSV written by `utils.attack_success_rate(...)` contains:
 
 To work with `data-analysis.ipynb`, start Jupyter from the project root after installing the dependencies you need for notebooks.
 
-If you already have Jupyter available globally:
-
-```bash
-jupyter notebook
-```
-
-or:
-
-```bash
-jupyter lab
-```
-
-Then open `data-analysis.ipynb`.
 
 ## Notes
 
