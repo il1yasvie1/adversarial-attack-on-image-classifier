@@ -2,3 +2,4 @@ data/
 __pycache__/
 .venv/
 cifar10_resnet20_pretrained.pth
+.DS_store
